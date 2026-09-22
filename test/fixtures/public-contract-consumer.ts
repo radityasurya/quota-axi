@@ -6,7 +6,7 @@ import {
   type ModelsResponse,
   type ProviderOptions,
   type QuotaAxiResponse,
-} from "quota-axi";
+} from "@radityasurya/quota-axi";
 
 const profileOnlyOptions: ProviderOptions = {
   allowKeychainPrompt: false,

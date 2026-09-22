@@ -43,6 +43,6 @@ local provider headroom.
 
 For current instructions, output shape, and field semantics, run the CLI (no global install required):
 
-- `npx -y quota-axi` - default TOON report
-- `npx -y quota-axi --help` - commands and flags
-- `npx -y quota-axi --json` / `npx -y quota-axi --full` - current output shape and field semantics
+- `npx -y @radityasurya/quota-axi` - default TOON report
+- `npx -y @radityasurya/quota-axi --help` - commands and flags
+- `npx -y @radityasurya/quota-axi --json` / `npx -y @radityasurya/quota-axi --full` - current output shape and field semantics
