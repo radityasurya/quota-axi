@@ -10,6 +10,64 @@ import {
 const fixtureDir = join(import.meta.dirname, "..", "fixtures", "claude");
 
 describe("Claude quota parsing", () => {
+  // Claude Code's /usage renders `${Math.floor(utilization)}% used`, and its
+  // rate_limits schema documents `limits[].percent` as "Share of the window
+  // used, 0-100". Shape recorded from a live Max account on 2026-09-22, when
+  // /usage showed session 16% used, week 3% used, Fable 0% used.
+  it("treats utilization and scoped-limit percent as used, not remaining", () => {
+    const result = normalizeClaudeApiUsage(
+      {
+        five_hour: { utilization: 16.0, resets_at: "2026-09-22T21:10:00Z" },
+        seven_day: { utilization: 3.0, resets_at: "2026-09-29T14:00:00Z" },
+        limits: [
+          {
+            kind: "session",
+            group: "session",
+            percent: 16,
+            severity: "normal",
+            resets_at: "2026-09-22T21:10:00Z",
+            scope: null,
+            is_active: true,
+          },
+          {
+            kind: "weekly_all",
+            group: "weekly",
+            percent: 3,
+            severity: "normal",
+            resets_at: "2026-09-29T14:00:00Z",
+            scope: null,
+            is_active: false,
+          },
+          {
+            kind: "weekly_scoped",
+            group: "weekly",
+            percent: 0,
+            severity: "normal",
+            resets_at: "2026-09-29T14:00:00Z",
+            scope: {
+              model: { id: null, display_name: "Fable" },
+              surface: null,
+            },
+            is_active: false,
+          },
+        ],
+      },
+      "Max",
+    );
+
+    expect(
+      result?.windows.map(({ id, percentUsed, percentRemaining }) => ({
+        id,
+        percentUsed,
+        percentRemaining,
+      })),
+    ).toEqual([
+      { id: "five_hour", percentUsed: 16, percentRemaining: 84 },
+      { id: "seven_day", percentUsed: 3, percentRemaining: 97 },
+      { id: "model:fable", percentUsed: 0, percentRemaining: 100 },
+    ]);
+  });
+
   it("normalizes OAuth usage windows and extra usage", () => {
     const raw = JSON.parse(
       readFileSync(join(fixtureDir, "oauth.json"), "utf8"),
@@ -21,24 +79,24 @@ describe("Claude quota parsing", () => {
       {
         id: "five_hour",
         kind: "session",
-        percentUsed: 82,
-        percentRemaining: 18,
+        percentUsed: 18,
+        percentRemaining: 82,
         resetsAt: "2026-07-06T22:15:00Z",
         windowSeconds: 18_000,
       },
       {
         id: "seven_day",
         kind: "weekly",
-        percentUsed: 64,
-        percentRemaining: 36,
+        percentUsed: 36,
+        percentRemaining: 64,
         resetsAt: "2026-07-10T16:00:00Z",
         windowSeconds: 604_800,
       },
       {
         id: "seven_day_opus",
         kind: "model",
-        percentUsed: 93,
-        percentRemaining: 7,
+        percentUsed: 7,
+        percentRemaining: 93,
         windowSeconds: 604_800,
       },
       {
@@ -56,68 +114,6 @@ describe("Claude quota parsing", () => {
     ).toBeUndefined();
   });
 
-  it("treats Claude utilization and scoped-limit percent as remaining", () => {
-    const result = normalizeClaudeApiUsage(
-      {
-        five_hour: { utilization: 38 },
-        seven_day: { utilization: 31 },
-        limits: [
-          {
-            group: "session",
-            kind: "session",
-            percent: 38,
-          },
-          {
-            group: "weekly",
-            kind: "weekly_all",
-            percent: 31,
-          },
-          {
-            kind: "weekly_model",
-            percent: 17,
-            scope: { model: { display_name: "Fable", id: "fable" } },
-          },
-        ],
-      },
-      "Max",
-    );
-
-    expect(result?.windows).toMatchObject([
-      { id: "five_hour", percentUsed: 62, percentRemaining: 38 },
-      { id: "seven_day", percentUsed: 69, percentRemaining: 31 },
-      { id: "model:fable", percentUsed: 83, percentRemaining: 17 },
-    ]);
-  });
-
-  it("treats extra-usage utilization as percent used", () => {
-    const result = normalizeClaudeApiUsage({
-      extra_usage: {
-        is_enabled: true,
-        utilization: 42,
-      },
-    });
-
-    expect(result?.windows).toMatchObject([
-      {
-        id: "extra_usage",
-        percentUsed: 42,
-        percentRemaining: 58,
-      },
-    ]);
-  });
-
-  it("treats a zero remaining vendor value as exhausted", () => {
-    const result = normalizeClaudeApiUsage({
-      five_hour: { utilization: 0 },
-      seven_day: { utilization: 0 },
-    });
-
-    expect(result?.windows).toMatchObject([
-      { id: "five_hour", percentUsed: 100, percentRemaining: 0 },
-      { id: "seven_day", percentUsed: 100, percentRemaining: 0 },
-    ]);
-  });
-
   it("prefers the scoped `limits` array and surfaces model-scoped windows like Fable", () => {
     const raw = JSON.parse(
       readFileSync(join(fixtureDir, "oauth-scoped-limits.json"), "utf8"),
@@ -129,16 +125,16 @@ describe("Claude quota parsing", () => {
       {
         id: "five_hour",
         kind: "session",
-        percentUsed: 78,
-        percentRemaining: 22,
+        percentUsed: 22,
+        percentRemaining: 78,
         resetsAt: "2026-07-06T22:15:00.317709+00:00",
         windowSeconds: 18_000,
       },
       {
         id: "seven_day",
         kind: "weekly",
-        percentUsed: 59,
-        percentRemaining: 41,
+        percentUsed: 41,
+        percentRemaining: 59,
         resetsAt: "2026-07-10T16:00:00.317732+00:00",
         windowSeconds: 604_800,
       },
@@ -146,8 +142,8 @@ describe("Claude quota parsing", () => {
         id: "model:fable",
         label: "Fable week",
         kind: "model",
-        percentUsed: 37,
-        percentRemaining: 63,
+        percentUsed: 63,
+        percentRemaining: 37,
         resetsAt: "2026-07-11T09:30:00.318030+00:00",
         windowSeconds: 604_800,
       },
